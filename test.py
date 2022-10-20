@@ -1,37 +1,76 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-import time
 import statistics
+from operator import add
+import time
 
-file = '2022.png'
+file = '2021.png'
 checkbin = []
 in_river = []
 out_river = []
 old_checkbin = []
-threshold_r = 30
-threshold_g = 30
-threshold_b = 30
+threshold_r = 0
+threshold_g = 0
+threshold_b = 0
 ref_r = 0
 ref_g = 0
 ref_b = 0
 ref_x = 500
 ref_y = 0
-radius = 10
+variance_radius = 6
 threshold = 30
 plot_scan = True
 update_ref = False
-distance_type = 'mahalanobis'
+distance_type = 'spheric'
 
 four_connected = [(-1, 0), (0, 1), (1, 0), (0, -1)]
 eight_connected = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
+
+mahalanobis_box = []
+
+
+def do_plot_scan():
+    for position in checkbin:
+        plt.plot(position[1], position[0], marker='.', color="red", markersize=1)
+    for position in out_river:
+        plt.plot(position[1], position[0], marker='.', color="violet", markersize=1)
+    for position in mahalanobis_box:
+        plt.plot(position[1], position[0], marker='.', color="green", markersize=1)
+    plt.plot(ref_y, ref_x, marker='v', color="blue")
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    plt.pause(.1)
+
+
+class RiverPoint:
+    generation_n = 0
+    position = (0, 0)
+    father_direction_trend = (0, 0)
+    children_directions = []
+
+    def __init__(self, generation_n, point_position, father_direction_trend=(0, 0)):
+        self.generation_n = generation_n
+        self.position = point_position
+        self.father_direction_trend = father_direction_trend
+
+    def add_direction_child(self, children_position):
+        direction = self.position - children_position
+        self.children_directions.append(direction)
+
+    def get_movement_trend(self):
+        trend = self.father_direction_trend * 2
+        for d in self.children_directions:
+            trend = trend + d
+        trend = trend / (len(self.children_directions) + 2)
+        return trend
 
 
 def calc_distance(center, radius):
     global distance_type
     if distance_type == 'spheric':
         calc_spheric_distance(center)
-    if distance_type == 'mahalanobis':
+    if distance_type == 'pseudo_mahalanobis':
         calc_mahalanobis_dist(center, radius)
 
 
@@ -96,13 +135,18 @@ def calc_mahalanobis_dist(center, radius):
     ref_g = image_original[center[0], center[1], 1]
     ref_b = image_original[center[0], center[1], 2]
 
+    for p in neighbourhood:
+        if p[0] == center[0] - radius or p[0] == center[0] + radius \
+                or p[0] == center[1] - radius or p[1] == center[1] + radius:
+            mahalanobis_box.append(p)
+
     return
 
 
 def update_reference():
     global ref_x, ref_y
     global ref_r, ref_g, ref_b
-    global radius
+    global variance_radius
 
     sum_x = 0
     sum_y = 0
@@ -121,7 +165,7 @@ def update_reference():
     ref_x = reference[0]
     ref_y = reference[1]
 
-    calc_distance((ref_x, ref_y), radius)
+    calc_distance((ref_x, ref_y), variance_radius)
 
     return
 
@@ -162,22 +206,26 @@ def check():
     global in_river
     global out_river
     for p in checkbin:
-        x = p[0]
-        y = p[1]
-        R = image_original[x, y, 0]
-        G = image_original[x, y, 1]
-        B = image_original[x, y, 2]
-        dis_r = abs(int(R) - int(ref_r))
-        dis_g = abs(int(G) - int(ref_g))
-        dis_b = abs(int(B) - int(ref_b))
+        ref_pixel = [ref_r, ref_g, ref_b]
+        test_pixel = [int(x) for x in image_original[p]]
+        dis_r = abs(ref_pixel[0] - test_pixel[0])
+        dis_g = abs(ref_pixel[0] - test_pixel[0])
+        dis_b = abs(ref_pixel[0] - test_pixel[0])
+
         if dis_r < threshold_r and dis_g < threshold_g and dis_b < threshold_b:
             min_dis = min([dis_r, dis_g, dis_b])
             m = statistics.mean([threshold_r, threshold_g, threshold_b])
             val = 255 * min_dis/m
             in_river.append(p)
-            image_river[x, y] = (val, 0, val)
+            image_river[p] = (255 - val, val, 0)
+            # if val < 80:
+            #     in_river.append(p)
+            #     image_river[p] = (val, 255 - val, 0)
+            # else:
+            #     out_river.append(p)
         else:
             out_river.append(p)
+            image_river[p] = (0, 0, 255)
 
     checkbin = [x for x in checkbin if x not in out_river]
     return
@@ -192,38 +240,31 @@ ref = (ref_x, ref_y)
 checkbin.append(ref)
 
 # calculate distance
-calc_distance(ref, radius)
+calc_distance(ref, variance_radius)
 print("current reference colour: ({}, {}, {})".format(ref_r, ref_g, ref_b))
 
-if plot_scan:
+if do_plot_scan:
     plt.ion()
     fig = plt.figure()
     plt.imshow(image_original)
 
 n = 0
 
+
 while len(checkbin) > 0:
-    n += 1
     expand_checkbin()
     check()
     print("iteration {}".format(n))
-    if plot_scan is True and n % 200 == 0:
-        for position in checkbin:
-            plt.plot(position[1], position[0], marker='.', color="red", markersize=1)
-        for position in out_river:
-            plt.plot(position[1], position[0], marker='.', color="violet", markersize=1)
-        plt.plot(ref_y, ref_x, marker='v', color="blue")
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-        plt.pause(.1)
+    if do_plot_scan is True and n % 200 == 0:
+        do_plot_scan()
     if update_ref and n % 200 == 0:
         update_reference()
-        # for p in checkbin:
-        #     river_image[p[0],p[1]] = (0, 255, 0)
-        # river_image[refX][refY] = (255, 0, 0)
         print("current reference colour: ({}, {}, {})".format(ref_r, ref_g, ref_b))
+    n += 1
 
-if plot_scan:
+do_plot_scan()
+
+if do_plot_scan:
     plt.ioff()
 
 print("plotting river image...")
