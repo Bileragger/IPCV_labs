@@ -94,6 +94,7 @@ def calc_distance(start_x, start_y):
     # the variable training_set_box_radius determines the size of the box used to learn the characteristics
     # of the colour of the river surface. Its width and height are hence calculated and used to determine
     # the position of its pixels.
+
     training_set = []
     x_width = list(range(start_x - training_set_box_radius, start_x + training_set_box_radius + 1))
     y_width = list(range(start_y - training_set_box_radius, start_y + training_set_box_radius + 1))
