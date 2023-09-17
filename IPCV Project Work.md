@@ -116,16 +116,16 @@ I'll now present some examples and interesting cases in which I applied this alg
 
 In this first example the colour of the river is very different from the green land surrounding and the conditions are perfect for an extraction.
 
-![](/results/result-1.1.png)
+![](results/result-1.1.png)
 Here is shown a final frame of the real time plot, highlighting the box (green) used to learn the colour of the river and the river banks (pink).
 
 > When I talk about *learning* I'm referring to different approaches depending on the method we are referring to: for the **uniform distance** it is just the mean among all the pixels in the box, for each channel, for the **Mahalanobis distance** we know that the colours are used to calculate the variances for each channel.
 
-![](/results/result-1.2.png)
+![](results/result-1.2.png)
 
 The final result is an highlighted river composed by shades of green and red. As mentioned earlier those colours transpose chromatically the distance from the reference colour. The river banks are highlighted in blue. This river was obtained with the Mahalanobis distance.
 
-![](/results/result-1.3.png)
+![](results/result-1.3.png)
 
 This is the final result we obtained with the uniform distance. It looks like the confidence of the algorithm is higher since the green colour is more evident here.
 
@@ -137,15 +137,15 @@ In the next examples we will see some more difficult cases where the difference 
 
 This comparison is interesting since it shows the climate change consequences but also the rising difficulty level of the process of river extraction the more the river is dry.
 
-![](/results/result-2.0.png)
+![](results/result-2.0.png)
 
 This result has been obtained with the mahalanobis distance without any correction. The extraction stops since the river slowly changes it's colour.
 
-![](/results/result-2.1.png)
+![](results/result-2.1.png)
 
 To overcome the previous result in this test I've just added an arbitrary constant to the thresholds calculated by the Mahalanobis distance. The result is much better and the river is almost completely extracted.
 
-![](/results/result-2.2.png)
+![](results/result-2.2.png)
 
 In this detail of the previous image is shown why the river wasn't completely extracted: the bridges in the city of Piacenza act as a "wall" for the river image and the scanning algorithm stops there. Also we can notice that there is a leak in the river region since some land has been recognised as river (false positive).
 
@@ -155,15 +155,15 @@ In this detail of the previous image is shown why the river wasn't completely ex
 
 This is the same Po river in June 2021. Something we can notice immediately is that the river surface has a completely different colour now and some parts of the river are more narrow than before. Lots of areas within the river banks are dry now. 
 
-![](/results/result-3u35.png)
+![](results/result-3u35.png)
 
 This result was obtained setting the uniform distance at a proper threshold. It is evident that the extraction is much less precise and confident than the previous case. It is not possibile to increase the threshold even more otherwise the scanning algorithms will consider most of the land part of the river.
 
-![](/results/result-3u35d.png)
+![](results/result-3u35d.png)
 
 In this detail from the previous image we can notice that paradoxically the label "Po River" wasn't an obstacle for the scanning algorithm but the color change in the area in which the river is more dry is a big problem instead. 
  
-![](/results/result-3m5.png)
+![](results/result-3m5.png)
 
 Here the same river has been tested with the Mahalanobis distance. It looks like in this case this method works better since it can lean better the characteristics of the variation in the river colour.
 We can be confident with this outcome since here the river extraction stopped at the bridge like in the previous example.
@@ -178,15 +178,15 @@ The cases we're going to see now are particularly difficult because of some cond
 
 In this case we have the same Po river in June 2022. As we can see the river is very dry and in many parts there are huge islands who came out as a consequence. Also the colour of the surface changed again and in many points is very similar to the terrain itself. 
 
-![](/results/result-4.1.png)
+![](results/result-4.1.png)
 
 Here we can see that the Mahalanobis distance used to obtain the result is not enough to scan the whole river without stopping very quickly. It is possible to notice that in the area where it stopped there is a huge "island" showing the river bed because of the dryness. Its presence changes rapidly the colour off the river and the algorithm stops.
 
-![](/results/result-4.2.png)
+![](results/result-4.2.png)
 
 Trying to solve the problem presented in the previous image I tried to add some tolerance to the Mahalanobis thresholds, but the result wasn't the best. It is possible to notice that the river has been correctly extracted but now many parts of the land are mistakenly included as well.
 
-![](/results/result-4.3.png)
+![](results/result-4.3.png)
 
 In this specific difficult case the uniform distance worked better. There are still several "leaks" in the river blob but it's easy to notice that there are much less now. 
 
@@ -198,27 +198,27 @@ In this specific difficult case the uniform distance worked better. There are st
 
 This last example is one of the most difficult. The first thing to notice here is the gradual change in the colour of the river and the similarity with some colours of the terrain. Also there are some clouds in the sky that could distract the scanning algorithm. 
 
-![](/results/result-5.0.1.png)
+![](results/result-5.0.1.png)
 
 The first try was a simple Mahalanobis distance. As we can see, the algorithm stops really quickly because of the changing colour.
 
-![](/results/result-5.0.2.png)
+![](results/result-5.0.2.png)
 
 Similar results can be obtained with the uniform distance, even after tuning the parameter for the threshold. 
 
-![](/results/result-5.1.png)
+![](results/result-5.1.png)
 
 Activating the option for the reference update, as described in the previous chapters, the situation improves dramatically and the whole river is now extracted.
 
-![](/results/result-5.1.1.png)
+![](results/result-5.1.1.png)
 
 It is still interesting to notice this detail of the previous picture: as imagined, the clouds represent a problem here since they confuse the algorithm and make those tiny rivers in the background unreachable.
 
-![](/results/result-5.2.png)
+![](results/result-5.2.png)
 
 The extraction obtained with the uniform distance and the manual tuning is even better. It is possible to appreciate how green the river is and therefore how confident the script is. 
 
-![](/results/result-5.2.1.png)
+![](results/result-5.2.1.png)
 
 In the correspondent detail of this image it is clear that even the detection of the parts of the river partially occluded by the clouds are extracted better.
 

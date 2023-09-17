@@ -2,16 +2,12 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 import statistics
+import pylab as p
 
-params1 = {'image': 'test.png', 'start_x': 90, 'start_y': 190}
-params2 = {'image': '2020.png', 'start_x': 420, 'start_y': 335}
-params3 = {'image': '2021.png', 'start_x': 560, 'start_y': 160}
-params4 = {'image': '2022.png', 'start_x': 630, 'start_y': 177}
-params5 = {'image': 'test2.png', 'start_x': 100, 'start_y': 950}
+params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0}
+params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190}
 
-params_gc = {'image': 'test_GC.png', 'start_x': 39, 'start_y': 0}
-
-params = params_gc
+params = params1
 
 distance_type = 'uniform'
 connection_type = "eight_neighbourhood"
@@ -29,9 +25,10 @@ update_ref = False
 update_frequency = 200
 
 # plot params
-preview = True
+preview_plot = True
 rt_plot = True
-plot_frequency = 1
+rt_plot_period = 100
+result_plot = True
 
 check_bin = []
 river_in = []
@@ -279,6 +276,7 @@ def verify_position(position_to_check, new_checkbin):
     # adjacent pixel.
     if \
             position_to_check not in check_bin and \
+            position_to_check not in river_in and \
             position_to_check not in check_bin_old and \
             position_to_check not in new_checkbin:
         if 0 <= position_to_check[0] < image_original.shape[0] and 0 <= position_to_check[1] < image_original.shape[1]:
@@ -287,7 +285,10 @@ def verify_position(position_to_check, new_checkbin):
 
 
 count = 0
-
+bar_history = []
+bar_history.append((0,0))
+dxs = []
+dys = []
 
 def check(bin_to_check=None):
     global ref_r, ref_g, ref_b
@@ -299,9 +300,19 @@ def check(bin_to_check=None):
     # this function checks every pixel in the check bin (passed has as a global variable) and determines is it belongs
     # to the river or not.
     if bin_to_check is not None:
-        my_bin = bin_to_check
+        my_bin = []
+        for p in bin_to_check:
+            new_p = verify_position(p, [])
+            if new_p is not None:
+                my_bin.append(p)
     else:
         my_bin = check_bin
+
+    sum_x = 0
+    sum_y = 0
+    n_new_pixels = 0
+
+    print("checkbin size: {}".format(len(check_bin)))
 
     for pixel in my_bin:
         # each channel of the reference colour is combined in a reference pixel colour (R,G,B)
@@ -325,18 +336,166 @@ def check(bin_to_check=None):
 
             # this is a variable that contains all the points that belongs to the river
             river_in.append(pixel)
-            scan_progression[pixel] = count
+            sum_x += pixel[0]
+            sum_y += pixel[1]
+            n_new_pixels += 1
+            #scan_progression[pixel] = count
             count += 1
+
+            if bin_to_check is not None:
+                check_bin.append(pixel)
 
         else:
             # those pixels are the ones belonging to the river banks, coloured here in blue
             river_out.append(pixel)
             image_river[pixel] = (0, 0, 255)
 
+    if n_new_pixels > 0:
+        bar_x = sum_x/n_new_pixels
+        bar_y = sum_y/n_new_pixels
+
+        dx = bar_x - bar_history[-1][0]
+        dy = bar_y - bar_history[-1][1]
+
+        print("current delta: dx: {} dy: {}".format(dx, dy))
+
+        dxs.append(dx)
+        dys.append(dy)
+
+        bar_history.append((bar_x, bar_y))
+
+        #print("average dx: {}, average dy: {}".format(dx, dy))
+        print("cluster barycentre: x: {}, y: {}".format(bar_x, bar_y))
+
+
     # the last step is removing all the pixels that do not belong to the river from the check bin,
     # for the next expansion
     check_bin = [x for x in my_bin if x not in river_out]
+
     return
+
+
+first_derivatives = []
+
+
+def calculate_direction(n_records, plot=True):
+
+    if len(dxs) > n_records:
+        dx = sum(dxs[-n_records:]) / n_records
+        dy = sum(dys[-n_records:]) / n_records
+
+        first_derivatives.append((dx, dy))
+
+        # plot direction
+        if plot:
+            print("* current direction value based on the last {} records: x: {} y: {} *".format(n_records, dx, dy))
+            plt.arrow(
+                bar_history[-1][1], bar_history[-1][0], dy, dx,
+                fc="r", ec="r", head_width=.5, head_length=.5)
+
+        return dx, dy
+
+    return None
+
+
+def normalise(x, y):
+
+    if x == y == 0:
+        return 0, 0
+
+    if abs(x) != abs(y):
+        if abs(x) > abs(y):
+            y = y / abs(x)
+            x = x / abs(x)
+        else:
+            x = x / abs(y)
+            y = y / abs(y)
+    else:
+        x = x / abs(x)
+        y = y / abs(y)
+
+    return x, y
+
+
+def calculate_projection (first_derivatives, jump_size, alpha=0.5, backstep_size=10):
+
+    backtracking = 7
+
+    ref_bar = bar_history[-backtracking]
+
+    projection_bin = []
+
+    d1xf = first_derivatives[-backtracking][0]
+    d1yf = first_derivatives[-backtracking][1]
+
+    if len(first_derivatives) >= backtracking+backstep_size:
+        d2xf = d1xf - first_derivatives[-(backtracking+backstep_size)][0]
+        d2yf = d1yf - first_derivatives[-(backtracking+backstep_size)][1]
+    else:
+        d2xf = 0
+        d2yf = 0
+
+    d1xf, d1yf = normalise(d1xf, d1yf)
+    print("** NORMALIZED first derivative (YELLOW ARROW) : d1x: {} d1y: {} **".format(d1xf, d1yf))
+
+    # first derivative ARROW PLOT
+    plt.arrow(
+        ref_bar[1], ref_bar[0], d1yf, d1xf,
+        fc="y", ec="y", head_width=.5, head_length=.5)
+
+    d2xf, d2yf = normalise(d2xf, d2yf)
+    print("** NORMALIZED second derivative (GREEN ARROW): d2x: {} d2y: {} **".format(d2xf * alpha, d2yf * alpha))
+
+    # second derivative ARROW PLOT
+    plt.arrow(
+        ref_bar[1], ref_bar[0], d2yf * alpha, d2xf * alpha,
+        fc="g", ec="g", head_width=.5, head_length=.5)
+
+    # final direction given by the sum of the first and the second derivative
+
+    dxf = d1xf + d2xf * alpha
+    dyf = d1yf + d2yf * alpha
+
+    print("* final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
+
+    # normalising the result
+    dxf, dyf = normalise(dxf, dyf)
+
+    print("* NORMALIZED final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
+
+    plt.arrow(
+        ref_bar[1], ref_bar[0], dyf * (jump_size+1), dxf * (jump_size+1),
+        fc="b", ec="b", head_width=.5, head_length=.5)
+
+    # # the final equations for the projection
+    # for jump in range(jump_size):
+    #     prj_x = round(bar_history[-5][0] + dxf * (jump+1))
+    #     prj_y = round(bar_history[-5][1] + dyf * (jump+1))
+    #
+    #     projection_bin.append((prj_x, prj_y))
+    #     print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
+    #     plt.plot(prj_y, prj_x, marker='.', color="yellow")
+
+
+    # the final equations for the projection
+    for jump in range(jump_size):
+        prj_x = round(ref_bar[0] + d1xf * (jump+1))
+        prj_y = round(ref_bar[1] + d1yf * (jump+1))
+
+        projection_bin.append((prj_x, prj_y))
+        print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
+        plt.plot(prj_y, prj_x, marker='.', color="yellow")
+
+    # the final equations for the projection
+    for jump in range(jump_size):
+        prj_x = round(ref_bar[0] + d2xf * (jump+1))
+        prj_y = round(ref_bar[1] + d2yf * (jump+1))
+
+        projection_bin.append((prj_x, prj_y))
+        print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
+        plt.plot(prj_y, prj_x, marker='.', color="green")
+
+    return projection_bin
 
 
 # Initializing the algorithm
@@ -344,7 +503,7 @@ def check(bin_to_check=None):
 image_original = cv2.imread(params['image'], cv2.IMREAD_COLOR)
 image_original = cv2.cvtColor(image_original, cv2.COLOR_BGR2RGB)
 image_river = np.copy(image_original)
-scan_progression = np.copy(image_original)
+#scan_progression = np.copy(image_original)
 
 # Selecting a reference point that will be the starting point for the algorithm
 # and the reference center for the colour search
@@ -352,8 +511,8 @@ ref = (params['start_x'], params['start_y'])
 
 # This option is used in order to show a preview of the river highlighting the starting point,
 # to be sure is has been selected correctly
-if preview:
-    plt.figure()
+if preview_plot:
+    plt.figure("preview plot")
     plt.imshow(image_river)
     plt.plot(params['start_y'], params['start_x'], marker='v', color="red")
     plt.show()
@@ -370,24 +529,39 @@ print("current reference colour: ({}, {}, {})".format(ref_r, ref_g, ref_b))
 # if this option is active you can visualize the evolution of the scan in real time
 if rt_plot:
     plt.ion()
-    fig = plt.figure()
+    fig = plt.figure("real time plot")
     plt.imshow(image_original)
 
 # this is the main cicle who determines the gradual expansion fo the check bin
 # (the set of the point that will be checked)
 n = 0
-while len(check_bin) > 0:
+while len(check_bin) >= 0:
+
+    calculate_direction(n_records=5)
+
+    if len(check_bin) == 0:
+        print("-- STOP --")
+        prj_bin = calculate_projection(first_derivatives, jump_size=20, backstep_size=30)
+        check(prj_bin)
+
+        if len(check_bin) == 0:
+            print("-- FINAL STOP --")
+            break
+
     # for each iteration the check bin is expanded and then checked
     # the every time a pixel is analyzed it is removed from the check bin, so we know
     # the elaboration is over when the check bin is empty
+
     expand_check_bin()
     check()
+
     # this print is useful to keep track of the ongoing iteration
     print("iteration {}".format(n))
     # if the rt plot in enabled this will show an update every 200 iterations
     # showing too many iterations will slow down the algorithm
-    if rt_plot is True and n % plot_frequency == 0:
+    if rt_plot is True and n % rt_plot_period == 0:
         plot_rt_scan()
+
     # this is essential to update the reference colour used to determine if a point
     # belongs to the river or not. This was needed in order to compensate colour variations
     # given by variations in the depth of the river
@@ -407,7 +581,8 @@ if rt_plot:
     plt.ioff()
 
 # showing the final result collecting all the pixels belonging to the river set
-print("plotting river image...")
-plt.figure()
-plt.imshow(image_river)
-plt.show()
+if result_plot:
+    print("plotting result image...")
+    plt.figure("result plot")
+    plt.imshow(image_river)
+    plt.show()
