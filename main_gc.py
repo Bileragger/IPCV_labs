@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 import statistics
-import pylab as p
 
 params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0}
 params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190}
@@ -12,6 +11,7 @@ params = params1
 distance_type = 'uniform'
 connection_type = "eight_neighbourhood"
 
+# the subset of the image used to calculate the covariance matrices or the average on the RGB channels
 training_set_box_radius = 6
 
 # mahalanobis distance params
@@ -45,6 +45,11 @@ ref_b = 0
 
 mahalanobis_box_plot = []
 
+# new variables necessary for the Good Continuation implementation
+bar_history = [(0.0, 0.0)]
+dxs = []
+dys = []
+backtracking = 7
 
 def plot_rt_scan():
     # this funciton is needed for debugging purposes
@@ -105,7 +110,12 @@ def calc_distance(start_x, start_y):
                 training_set.append(p)
 
     # so in this case the training set is a box centered in the starting point
-    # its side has length equal to stdev_box_size * 2 + 1
+    # its side has length equal to training_set_box_radius * 2 + 1
+
+    # un update idea for this could be based on the fact that we know that the surface we are trying to learn is
+    # almost uniform in terms of colours and intensities of the pixels. So we could start exclude pixels that are
+    # outliers in terms of the average colour detected (especially the one of the first reference pixel which is the
+    # centre). The technique should be similar to the one used for the Selective Search or the superpixel segmentation.
 
     if distance_type == 'uniform':
         # this distance gives the same threshold to each channel, the radius is the distance wrt the center
@@ -120,9 +130,9 @@ def calc_distance(start_x, start_y):
         for p in training_set:
             if \
                     p[0] == start_x - training_set_box_radius or \
-                            p[0] == start_x + training_set_box_radius or \
-                            p[1] == start_y - training_set_box_radius or \
-                            p[1] == start_y + training_set_box_radius:
+                    p[0] == start_x + training_set_box_radius or \
+                    p[1] == start_y - training_set_box_radius or \
+                    p[1] == start_y + training_set_box_radius:
                 mahalanobis_box_plot.append(p)
 
         return
@@ -285,20 +295,13 @@ def verify_position(position_to_check, new_checkbin):
     return None
 
 
-count = 0
-bar_history = []
-bar_history.append((0,0))
-dxs = []
-dys = []
-
 def check(bin_to_check=None):
     global ref_r, ref_g, ref_b
     global check_bin_old
     global check_bin
     global river_in
     global river_out
-    global count
-    # this function checks every pixel in the check bin (passed has as a global variable) and determines is it belongs
+    # this function checks every pixel in the check bin (passed as a global variable) and determines is it belongs
     # to the river or not.
     if bin_to_check is not None:
         my_bin = []
@@ -337,11 +340,12 @@ def check(bin_to_check=None):
 
             # this is a variable that contains all the points that belongs to the river
             river_in.append(pixel)
+
+            # this is the sum over the x and y coordinates that will be used to calculate the barycentre of the bin
             sum_x += pixel[0]
             sum_y += pixel[1]
+
             n_new_pixels += 1
-            #scan_progression[pixel] = count
-            count += 1
 
             if bin_to_check is not None:
                 check_bin.append(pixel)
@@ -351,6 +355,8 @@ def check(bin_to_check=None):
             river_out.append(pixel)
             image_river[pixel] = (0, 0, 255)
 
+    # if the checkbin has new pixels, a new barycentre is calculated and added to bar_history
+    # also, the dx and dy of the new barycentre wrt to the previous saved position is calculated and added to dxs and dys
     if n_new_pixels > 0:
         bar_x = sum_x/n_new_pixels
         bar_y = sum_y/n_new_pixels
@@ -380,14 +386,17 @@ first_derivatives = []
 
 
 def calculate_direction(n_records, plot=True):
+    # n_records is a variable that defines how many of the past movements of the barycentre will be considered
+    # in order to calculate the mean/derivative of the bin's movements
 
     if len(dxs) > n_records:
         dx = sum(dxs[-n_records:]) / n_records
         dy = sum(dys[-n_records:]) / n_records
 
+        # it is actually a mean of the last n records of dx and dy, since the module of the movement is always 1
         first_derivatives.append((dx, dy))
 
-        # plot direction
+        # visualize the computed direction with an arrow on the plot
         if plot:
             print("* current direction value based on the last {} records: x: {} y: {} *".format(n_records, dx, dy))
             plt.arrow(
@@ -399,7 +408,7 @@ def calculate_direction(n_records, plot=True):
     return None
 
 
-def normalise(x, y):
+def normalize(x, y):
 
     if x == y == 0:
         return 0, 0
@@ -419,16 +428,22 @@ def normalise(x, y):
 
 
 def calculate_projection (first_derivatives, jump_size, alpha=0.5, backstep_size=10):
+    # this function uses the derivatives of the barycentre shifts to compute the jump
 
-    backtracking = 7
-
+    # usually before an obstacle, when the checkbin is almost empty, the shifs of the barycentre are not stable
+    # but behave more randomly. In order to prevent this we backtrack to n steps before the actual end of the checkbin
+    # to compute the direction of the jump.
     ref_bar = bar_history[-backtracking]
 
+    # the projection is not a single point but a set of points that will be added to the check bin
     projection_bin = []
 
     d1xf = first_derivatives[-backtracking][0]
     d1yf = first_derivatives[-backtracking][1]
 
+    # in order to compute the second derivatives as well we must backtrack even more. To do so we use the parameter
+    # backstep_size and compute the difference with the derivative calculated previously. This is not a proper second
+    # derivative but will be normalized in the next steps.
     if len(first_derivatives) >= backtracking+backstep_size:
         d2xf = d1xf - first_derivatives[-(backtracking+backstep_size)][0]
         d2yf = d1yf - first_derivatives[-(backtracking+backstep_size)][1]
@@ -436,34 +451,35 @@ def calculate_projection (first_derivatives, jump_size, alpha=0.5, backstep_size
         d2xf = 0
         d2yf = 0
 
-    d1xf, d1yf = normalise(d1xf, d1yf)
+    d1xf, d1yf = normalize(d1xf, d1yf)
     print("** NORMALIZED first derivative (YELLOW ARROW) : d1x: {} d1y: {} **".format(d1xf, d1yf))
 
-    # first derivative ARROW PLOT
+    # first derivative YELLOW ARROW PLOT
     plt.arrow(
         ref_bar[1], ref_bar[0], d1yf, d1xf,
         fc="y", ec="y", head_width=.5, head_length=.5)
 
-    d2xf, d2yf = normalise(d2xf, d2yf)
+    d2xf, d2yf = normalize(d2xf, d2yf)
     print("** NORMALIZED second derivative (GREEN ARROW): d2x: {} d2y: {} **".format(d2xf * alpha, d2yf * alpha))
 
-    # second derivative ARROW PLOT
+    # second derivative GREEN ARROW PLOT
     plt.arrow(
         ref_bar[1], ref_bar[0], d2yf * alpha, d2xf * alpha,
         fc="g", ec="g", head_width=.5, head_length=.5)
 
     # final direction given by the sum of the first and the second derivative
-
+    # this is a wighted sum, where alpha defines how much the second derivative should act as a correction factor
+    # for the first derivative and get the final direction
     dxf = d1xf + d2xf * alpha
     dyf = d1yf + d2yf * alpha
 
     print("* final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
 
     # normalising the result
-    dxf, dyf = normalise(dxf, dyf)
-
+    dxf, dyf = normalize(dxf, dyf)
     print("* NORMALIZED final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
 
+    # final direction BLUE ARROW PLOT
     plt.arrow(
         ref_bar[1], ref_bar[0], dyf * (jump_size+1), dxf * (jump_size+1),
         fc="b", ec="b", head_width=.5, head_length=.5)
@@ -533,15 +549,19 @@ if rt_plot:
     fig = plt.figure("real time plot")
     plt.imshow(image_original)
 
-# this is the main cicle who determines the gradual expansion fo the check bin
+# this is the main cicle who determines the gradual expansion of the check bin
 # (the set of the point that will be checked)
 n = 0
 while len(check_bin) >= 0:
 
     calculate_direction(n_records=5)
 
+    # if the check bin is empty it could be that there is an obstacle or that the scanning is over
+    # calculate projection is needed to discriminate between the two possibilities
     if len(check_bin) == 0:
         print("-- STOP --")
+        # this makes possible for some pixels in the check bin to "jump" in the direction of the river
+        # then it keeps checking again the bin to see if the scanning can precede or must stop.
         prj_bin = calculate_projection(first_derivatives, jump_size=20, backstep_size=30)
         check(prj_bin)
 
