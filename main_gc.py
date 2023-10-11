@@ -3,12 +3,25 @@ import numpy as np
 from matplotlib import pyplot as plt
 import statistics
 
-params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0}
-params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190}
+params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0, 'dist_type': 'uniform', 'box_radius': 6, 'threshold': 35, 'jump_size': 20}
+params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190, 'dist_type': 'unifrom', 'box_radius': 6, 'threshold': 35, 'jump_size': 20}
+params3 = {'image': 'cables.png',
+           'start_x': 303,
+           'start_y': 111,
+           'dist_type': 'mahalanobis',
+           'threshold': 70,
+           'jump_size': 40}
+params4 = {'image': 'detail_gc.png',
+           'start_x': 15,
+           'start_y': 50,
+           'dist_type': 'uniform',
+           'box_radius': 6,
+           'threshold': 15,
+           'jump_size': 40}
 
-params = params1
+params = params4
 
-distance_type = 'uniform'
+#distance_type = 'mahalanobis'
 connection_type = "eight_neighbourhood"
 
 # the subset of the image used to calculate the covariance matrices or the average on the RGB channels
@@ -27,6 +40,9 @@ update_frequency = 200
 # plot params
 preview_plot = True
 rt_plot = True
+cb_blot = True
+rb_plot = False
+mb_plot = True
 rt_plot_period = 100
 result_plot = True
 
@@ -43,27 +59,31 @@ ref_r = 0
 ref_g = 0
 ref_b = 0
 
-mahalanobis_box_plot = []
+mahalanobis_box = []
 
 # new variables necessary for the Good Continuation implementation
 bar_history = [(0.0, 0.0)]
 dxs = []
 dys = []
 backtracking = 7
+jump_size = 20
 
-def plot_rt_scan():
+def plot_rt_scan(check_bin_plot=True, river_banks_plot=True, mahalanobis_box_plot=True):
     # this funciton is needed for debugging purposes
-    for position in check_bin:
-        # this function marks with a red marker every pixel in the check bin, updated in real time
-        plt.plot(position[1], position[0], marker='.', color="red", markersize=1)
-    for position in river_out:
-        # this function marks with a violet marker every pixel in the river bank, updated in real time
-        plt.plot(position[1], position[0], marker='.', color="violet", markersize=1)
-    for position in mahalanobis_box_plot:
-        # this function marks with a green marker all the pixels beloning to the mahalanobis box used to calculate the
-        # standard deviation of each channel
-        plt.plot(position[1], position[0], marker='.', color="green", markersize=1)
-    plt.plot(params['start_y'], params['start_x'], marker='v', color="blue")
+    if check_bin_plot:
+        for position in check_bin:
+            # this function marks with a red marker every pixel in the check bin, updated in real time
+            plt.plot(position[1], position[0], marker='.', color="red", markersize=1)
+    if river_banks_plot:
+        for position in river_out:
+            # this function marks with a violet marker every pixel in the river bank, updated in real time
+            plt.plot(position[1], position[0], marker='.', color="violet", markersize=1)
+    if mahalanobis_box_plot:
+        for position in mahalanobis_box:
+            # this function marks with a green marker all the pixels beloning to the mahalanobis box used to calculate the
+            # standard deviation of each channel
+            plt.plot(position[1], position[0], marker='.', color="green", markersize=1)
+        plt.plot(params['start_y'], params['start_x'], marker='v', color="blue")
     fig.canvas.draw()
     fig.canvas.flush_events()
     plt.pause(.1)
@@ -133,7 +153,7 @@ def calc_distance(start_x, start_y):
                     p[0] == start_x + training_set_box_radius or \
                     p[1] == start_y - training_set_box_radius or \
                     p[1] == start_y + training_set_box_radius:
-                mahalanobis_box_plot.append(p)
+                mahalanobis_box.append(p)
 
         return
 
@@ -475,7 +495,7 @@ def calculate_projection (first_derivatives, jump_size, alpha=0.5, backstep_size
 
     print("* final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
 
-    # normalising the result
+    # normalizing the result
     dxf, dyf = normalize(dxf, dyf)
     print("* NORMALIZED final direction (BLUE ARROW): x: {} y: {} *".format(dxf, dyf))
 
@@ -484,31 +504,35 @@ def calculate_projection (first_derivatives, jump_size, alpha=0.5, backstep_size
         ref_bar[1], ref_bar[0], dyf * (jump_size+1), dxf * (jump_size+1),
         fc="b", ec="b", head_width=.5, head_length=.5)
 
-    # # the final equations for the projection
-    # for jump in range(jump_size):
-    #     prj_x = round(bar_history[-5][0] + dxf * (jump+1))
-    #     prj_y = round(bar_history[-5][1] + dyf * (jump+1))
-    #
-    #     projection_bin.append((prj_x, prj_y))
-    #     print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
-    #     plt.plot(prj_y, prj_x, marker='.', color="yellow")
-
-
     # the final equations for the projection
+    for jump in range(jump_size):
+        prj_x = round(ref_bar[0] + dxf * (jump+1))
+        prj_y = round(ref_bar[1] + dyf * (jump+1))
+
+        projection_bin.append((prj_x, prj_y))
+        print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
+        plt.plot(prj_y, prj_x, marker='.', color="blue")
+
+
+    # the final equations for the projection (first derivative)
     for jump in range(jump_size):
         prj_x = round(ref_bar[0] + d1xf * (jump+1))
         prj_y = round(ref_bar[1] + d1yf * (jump+1))
 
+        # every pixel in the trajectory of the direction is added to the bin until the jump length is reached
         projection_bin.append((prj_x, prj_y))
+
         print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
         plt.plot(prj_y, prj_x, marker='.', color="yellow")
 
-    # the final equations for the projection
+    # the final equations for the projection (second derivative)
     for jump in range(jump_size):
         prj_x = round(ref_bar[0] + d2xf * (jump+1))
         prj_y = round(ref_bar[1] + d2yf * (jump+1))
 
+        # every pixel in the trajectory of the direction is added to the bin until the jump length is reached
         projection_bin.append((prj_x, prj_y))
+
         print("projection point with jump size {}: x: {}, y: {}".format(jump, prj_x, prj_y))
         plt.plot(prj_y, prj_x, marker='.', color="green")
 
@@ -525,6 +549,13 @@ image_river = np.copy(image_original)
 # Selecting a reference point that will be the starting point for the algorithm
 # and the reference center for the colour search
 ref = (params['start_x'], params['start_y'])
+distance_type = params['dist_type']
+if distance_type == 'mahalanobis':
+    tolerance = params['threshold']
+if distance_type == 'uniform':
+    threshold_rgb = params['threshold']
+jump_size = params['jump_size']
+training_set_box_radius = params['box_radius']
 
 # This option is used in order to show a preview of the river highlighting the starting point,
 # to be sure is has been selected correctly
@@ -562,7 +593,7 @@ while len(check_bin) >= 0:
         print("-- STOP --")
         # this makes possible for some pixels in the check bin to "jump" in the direction of the river
         # then it keeps checking again the bin to see if the scanning can precede or must stop.
-        prj_bin = calculate_projection(first_derivatives, jump_size=20, backstep_size=30)
+        prj_bin = calculate_projection(first_derivatives, jump_size=jump_size, backstep_size=30)
         check(prj_bin)
 
         if len(check_bin) == 0:
@@ -581,7 +612,7 @@ while len(check_bin) >= 0:
     # if the rt plot in enabled this will show an update every 200 iterations
     # showing too many iterations will slow down the algorithm
     if rt_plot is True and n % rt_plot_period == 0:
-        plot_rt_scan()
+        plot_rt_scan(cb_blot, rb_plot, mb_plot)
 
     # this is essential to update the reference colour used to determine if a point
     # belongs to the river or not. This was needed in order to compensate colour variations
@@ -598,7 +629,7 @@ while len(check_bin) >= 0:
 
 # if this plot option was enabled it can be ended now
 if rt_plot:
-    plot_rt_scan()
+    plot_rt_scan(cb_blot, rb_plot, mb_plot)
     plt.ioff()
 
 # showing the final result collecting all the pixels belonging to the river set
