@@ -3,12 +3,13 @@ import numpy as np
 from matplotlib import pyplot as plt
 import statistics
 
-params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0, 'dist_type': 'uniform', 'box_radius': 6, 'threshold': 35, 'jump_size': 20}
-params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190, 'dist_type': 'unifrom', 'box_radius': 6, 'threshold': 35, 'jump_size': 20}
+params1 = {'image': 'test_GC.png', 'start_x': 35, 'start_y': 0, 'dist_type': 'uniform', 'box_radius': 6, 'threshold': 35, 'jump_size': 15}
+params2 = {'image': 'test_GC2.png', 'start_x': 90, 'start_y': 190, 'dist_type': 'uniform', 'box_radius': 6, 'threshold': 35, 'jump_size': 20}
 params3 = {'image': 'cables.png',
            'start_x': 303,
            'start_y': 111,
            'dist_type': 'mahalanobis',
+           'box_radius': 6,
            'threshold': 70,
            'jump_size': 40}
 params4 = {'image': 'detail_gc.png',
@@ -18,10 +19,16 @@ params4 = {'image': 'detail_gc.png',
            'box_radius': 6,
            'threshold': 15,
            'jump_size': 40}
+params5 = {'image': 'cables2.png',
+           'start_x': 282,
+           'start_y': 540,
+           'dist_type': 'uniform',
+           'box_radius': 3,
+           'threshold': 65,
+           'jump_size': 50}
 
-params = params4
+params = params1
 
-#distance_type = 'mahalanobis'
 connection_type = "eight_neighbourhood"
 
 # the subset of the image used to calculate the covariance matrices or the average on the RGB channels
